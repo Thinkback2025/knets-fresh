@@ -49,10 +49,16 @@ jobs:
     - name: Build debug APK
       working-directory: android
       run: |
-        echo "Building APK..."
-        ./gradlew assembleDebug --stacktrace --info --no-daemon
-        echo "Build completed, checking what was generated..."
+        echo "Building APK with verbose output..."
+        ./gradlew assembleDebug --stacktrace --info --no-daemon --debug
+        echo "Build completed, listing all files in build directory..."
+        find . -path "*/build/*" -type f -name "*" | head -30
+        echo "Specifically looking for APK files..."
         find . -name "*.apk" -type f -exec ls -la {} \; || echo "No APK files found"
+        echo "Checking if outputs directory exists..."
+        ls -la app/build/outputs/ || echo "Outputs directory not found"
+        echo "Checking all subdirectories of outputs..."
+        find app/build/outputs/ -type f -exec ls -la {} \; 2>/dev/null || echo "No files in outputs"
         
     - name: Find and prepare APK
       working-directory: android
