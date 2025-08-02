@@ -50,7 +50,9 @@ jobs:
       working-directory: android
       run: |
         echo "Building APK..."
-        ./gradlew assembleDebug --stacktrace --info
+        ./gradlew assembleDebug --stacktrace --info --no-daemon
+        echo "Build completed, checking what was generated..."
+        find . -name "*.apk" -type f -exec ls -la {} \; || echo "No APK files found"
         
     - name: Find and prepare APK
       working-directory: android
@@ -71,8 +73,11 @@ jobs:
         # Look for APK in common locations
         APK_FILE=""
         
+        # Check for our explicitly named APK
+        if [ -f "app/build/outputs/apk/debug/knets-jr-debug.apk" ]; then
+          APK_FILE="app/build/outputs/apk/debug/knets-jr-debug.apk"
         # Check standard debug location
-        if [ -f "app/build/outputs/apk/debug/app-debug.apk" ]; then
+        elif [ -f "app/build/outputs/apk/debug/app-debug.apk" ]; then
           APK_FILE="app/build/outputs/apk/debug/app-debug.apk"
         # Check for any APK file in outputs
         elif [ -n "$(find . -path "*/outputs/*" -name "*.apk" -type f | head -n 1)" ]; then
