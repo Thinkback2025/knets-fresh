@@ -69,7 +69,21 @@ app/src/main/
 
 ## Build Instructions
 
-### Using Bitrise.io (Recommended)
+### Method 1: Docker Build (Recommended)
+```bash
+./build_local_apk.sh
+```
+
+### Method 2: GitHub Actions Docker
+Push to GitHub - the Docker-based workflow will build the APK
+
+### Method 3: Manual Gradle Build
+```bash
+cd android
+./gradlew clean assembleDebug
+```
+
+### Method 4: Using Bitrise.io
 1. Upload this project to GitHub repository
 2. Connect repository to Bitrise.io
 3. Bitrise auto-detects Android project and configures build
