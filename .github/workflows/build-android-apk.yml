@@ -56,16 +56,28 @@ jobs:
       uses: actions/upload-artifact@v4
       with:
         name: knets-jr-debug-apk
-        path: android/app/build/outputs/apk/debug/knets-jr-debug.apk
+        path: android/app/build/outputs/apk/debug/app-debug.apk
         retention-days: 30
-        if-no-files-found: warn
+        if-no-files-found: error
         
-    - name: List APK details
+    - name: Find and prepare APK
       working-directory: android
       run: |
         echo "APK build completed successfully!"
-        find app/build/outputs -name "*.apk" -type f -exec ls -la {} \;
-        echo "Contents of debug folder:"
-        ls -la app/build/outputs/apk/debug/ || echo "Debug folder not found"
-        echo "All APK folders:"
-        find app/build/outputs -type d -name "*apk*" -exec ls -la {} \;
+        echo "Searching for APK files..."
+        find . -name "*.apk" -type f -exec ls -la {} \;
+        
+        echo "Creating outputs directory structure..."
+        mkdir -p app/build/outputs/apk/debug/
+        
+        echo "Finding and copying APK to expected location..."
+        APK_FILE=$(find . -name "*.apk" -type f | head -n 1)
+        if [ -n "$APK_FILE" ]; then
+          echo "Found APK: $APK_FILE"
+          cp "$APK_FILE" app/build/outputs/apk/debug/app-debug.apk
+          echo "APK copied to: app/build/outputs/apk/debug/app-debug.apk"
+          ls -la app/build/outputs/apk/debug/
+        else
+          echo "No APK file found!"
+          exit 1
+        fi
