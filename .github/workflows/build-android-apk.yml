@@ -47,6 +47,12 @@ jobs:
         yes | $HOME/android-sdk/cmdline-tools/latest/bin/sdkmanager --licenses
         $HOME/android-sdk/cmdline-tools/latest/bin/sdkmanager "platform-tools" "platforms;android-33" "build-tools;33.0.0"
 
+    - name: Create required Android icons
+      working-directory: android
+      run: |
+        chmod +x create_icons.sh
+        ./create_icons.sh
+
     - name: Make gradlew executable
       working-directory: android
       run: chmod +x gradlew
@@ -54,23 +60,34 @@ jobs:
     - name: Build debug APK
       working-directory: android
       run: |
-        echo "Building APK..."
-        ./gradlew clean assembleDebug --stacktrace
+        echo "Building APK with detailed output..."
+        ./gradlew clean assembleDebug --stacktrace --info
         
-        echo "Searching for APK files..."
+        echo "Build completed. Searching for APK files..."
         find . -name "*.apk" -type f -exec ls -la {} \;
+        
+        echo "Checking build outputs directory..."
+        ls -la app/build/outputs/apk/debug/ || echo "Debug output directory not found"
         
         # Ensure output directory exists
         mkdir -p app/build/outputs/apk/debug
         
-        # Copy any found APK to standard location
-        APK_FILE=$(find . -name "*.apk" -type f | head -n 1)
-        if [ -n "$APK_FILE" ]; then
-          echo "Found APK: $APK_FILE"
-          cp "$APK_FILE" app/build/outputs/apk/debug/app-debug.apk
+        # Look for APK in expected location first
+        if [ -f "app/build/outputs/apk/debug/app-debug.apk" ]; then
+          echo "APK found in expected location"
+          ls -la app/build/outputs/apk/debug/app-debug.apk
         else
-          echo "No APK file found!"
-          exit 1
+          # Search for any APK file
+          APK_FILE=$(find . -name "*.apk" -type f | head -n 1)
+          if [ -n "$APK_FILE" ]; then
+            echo "Found APK: $APK_FILE"
+            cp "$APK_FILE" app/build/outputs/apk/debug/app-debug.apk
+          else
+            echo "No APK file found! Build may have failed."
+            echo "Checking gradle logs..."
+            find . -name "*.log" -exec cat {} \;
+            exit 1
+          fi
         fi
 
     - name: Upload APK artifact
