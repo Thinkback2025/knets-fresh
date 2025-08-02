@@ -56,21 +56,43 @@ jobs:
       working-directory: android
       run: |
         echo "APK build completed successfully!"
-        echo "Searching for APK files..."
+        echo "Searching for APK files in build directory..."
         find . -name "*.apk" -type f -exec ls -la {} \;
         
-        echo "Creating outputs directory structure..."
+        echo "Checking build outputs structure..."
+        find . -path "*/build/outputs*" -type d -exec ls -la {} \;
+        
+        echo "Looking for any build output files..."
+        find . -path "*/build/outputs*" -name "*" -type f -exec ls -la {} \;
+        
+        echo "Creating expected directory structure..."
         mkdir -p app/build/outputs/apk/debug/
         
-        echo "Finding and copying APK to expected location..."
-        APK_FILE=$(find . -name "*.apk" -type f | head -n 1)
+        # Look for APK in common locations
+        APK_FILE=""
+        
+        # Check standard debug location
+        if [ -f "app/build/outputs/apk/debug/app-debug.apk" ]; then
+          APK_FILE="app/build/outputs/apk/debug/app-debug.apk"
+        # Check for any APK file in outputs
+        elif [ -n "$(find . -path "*/outputs/*" -name "*.apk" -type f | head -n 1)" ]; then
+          APK_FILE=$(find . -path "*/outputs/*" -name "*.apk" -type f | head -n 1)
+        # Check for any APK file anywhere
+        elif [ -n "$(find . -name "*.apk" -type f | head -n 1)" ]; then
+          APK_FILE=$(find . -name "*.apk" -type f | head -n 1)
+        fi
+        
         if [ -n "$APK_FILE" ]; then
           echo "Found APK: $APK_FILE"
           cp "$APK_FILE" app/build/outputs/apk/debug/app-debug.apk
           echo "APK copied to: app/build/outputs/apk/debug/app-debug.apk"
           ls -la app/build/outputs/apk/debug/
         else
-          echo "No APK file found!"
+          echo "No APK file found! Checking if build actually succeeded..."
+          echo "Contents of app/build/:"
+          ls -la app/build/ || echo "app/build/ directory not found"
+          echo "Let's see what Gradle actually built:"
+          find . -path "*/build/*" -type f -name "*" | head -20
           exit 1
         fi
       
