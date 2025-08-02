@@ -1,10 +1,10 @@
-name: Build Android APK (Manual SDK)
+name: Build Android APK (Ultra Simple)
 
 on:
   push:
-    branches: [ main ]
+    branches: [ main, master ]
   pull_request:
-    branches: [ main ]
+    branches: [ main, master ]
   workflow_dispatch:
 
 jobs:
@@ -15,84 +15,52 @@ jobs:
     - name: Checkout code
       uses: actions/checkout@v4
 
-    - name: Set up JDK 11
+    - name: Set up JDK 17
       uses: actions/setup-java@v4
       with:
-        java-version: '11'
+        java-version: '17'
         distribution: 'temurin'
 
-    - name: Setup Android SDK manually
-      run: |
-        echo "Installing Android SDK manually..."
-        
-        # Create SDK directory
-        mkdir -p $HOME/android-sdk
-        cd $HOME/android-sdk
-        
-        # Download command line tools
-        wget -q https://dl.google.com/android/repository/commandlinetools-linux-9477386_latest.zip
-        unzip -q commandlinetools-linux-9477386_latest.zip
-        
-        # Create proper directory structure
-        mkdir -p cmdline-tools/latest
-        mv cmdline-tools/* cmdline-tools/latest/ 2>/dev/null || true
-        
-        # Set environment variables
-        echo "ANDROID_HOME=$HOME/android-sdk" >> $GITHUB_ENV
-        echo "ANDROID_SDK_ROOT=$HOME/android-sdk" >> $GITHUB_ENV
-        echo "$HOME/android-sdk/cmdline-tools/latest/bin" >> $GITHUB_PATH
-        echo "$HOME/android-sdk/platform-tools" >> $GITHUB_PATH
-        
-        # Install required packages
-        yes | $HOME/android-sdk/cmdline-tools/latest/bin/sdkmanager --licenses
-        $HOME/android-sdk/cmdline-tools/latest/bin/sdkmanager "platform-tools" "platforms;android-33" "build-tools;33.0.0"
+    - name: Setup Android SDK
+      uses: android-actions/setup-android@v3
+      with:
+        api-level: 33
+        target: default
+        arch: x86_64
 
-    - name: Create required Android icons
+    - name: Create Android icons
       working-directory: android
       run: |
         chmod +x create_icons.sh
         ./create_icons.sh
 
-    - name: Make gradlew executable
-      working-directory: android
-      run: chmod +x gradlew
-
-    - name: Build debug APK
+    - name: Build APK
       working-directory: android
       run: |
-        echo "Building APK with detailed output..."
+        chmod +x gradlew
+        echo "Starting Gradle build..."
         ./gradlew clean assembleDebug --stacktrace --info
         
-        echo "Build completed. Searching for APK files..."
+        echo "Build completed, checking outputs..."
+        find . -type d -name "outputs" -exec ls -la {} \;
         find . -name "*.apk" -type f -exec ls -la {} \;
         
-        echo "Checking build outputs directory..."
-        ls -la app/build/outputs/apk/debug/ || echo "Debug output directory not found"
-        
-        # Ensure output directory exists
-        mkdir -p app/build/outputs/apk/debug
-        
-        # Look for APK in expected location first
-        if [ -f "app/build/outputs/apk/debug/app-debug.apk" ]; then
-          echo "APK found in expected location"
-          ls -la app/build/outputs/apk/debug/app-debug.apk
+        # Ensure APK exists and copy to standard location
+        mkdir -p outputs
+        APK_PATH=$(find . -name "*.apk" -type f | head -1)
+        if [ -n "$APK_PATH" ]; then
+          cp "$APK_PATH" outputs/knets-jr-debug.apk
+          echo "APK successfully created: $(ls -la outputs/)"
         else
-          # Search for any APK file
-          APK_FILE=$(find . -name "*.apk" -type f | head -n 1)
-          if [ -n "$APK_FILE" ]; then
-            echo "Found APK: $APK_FILE"
-            cp "$APK_FILE" app/build/outputs/apk/debug/app-debug.apk
-          else
-            echo "No APK file found! Build may have failed."
-            echo "Checking gradle logs..."
-            find . -name "*.log" -exec cat {} \;
-            exit 1
-          fi
+          echo "ERROR: No APK file generated"
+          echo "Checking build directory structure:"
+          find app/build -type f -name "*.apk" 2>/dev/null || echo "No APK in app/build"
+          exit 1
         fi
 
     - name: Upload APK artifact
       uses: actions/upload-artifact@v4
       with:
-        name: knets-jr-apk
-        path: android/app/build/outputs/apk/debug/app-debug.apk
+        name: knets-jr-debug-apk
+        path: android/outputs/knets-jr-debug.apk
         retention-days: 30
