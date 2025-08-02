@@ -51,14 +51,6 @@ jobs:
       run: |
         echo "Building APK..."
         ./gradlew assembleDebug --stacktrace --info
-      
-    - name: Upload APK artifact
-      uses: actions/upload-artifact@v4
-      with:
-        name: knets-jr-debug-apk
-        path: android/app/build/outputs/apk/debug/app-debug.apk
-        retention-days: 30
-        if-no-files-found: error
         
     - name: Find and prepare APK
       working-directory: android
@@ -81,3 +73,11 @@ jobs:
           echo "No APK file found!"
           exit 1
         fi
+      
+    - name: Upload APK artifact
+      uses: actions/upload-artifact@v4
+      with:
+        name: knets-jr-debug-apk
+        path: android/app/build/outputs/apk/debug/app-debug.apk
+        retention-days: 30
+        if-no-files-found: error
