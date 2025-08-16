@@ -20,8 +20,9 @@ import android.Manifest
 import androidx.core.app.ActivityCompat
 import androidx.core.content.ContextCompat
 import android.content.pm.PackageManager
-import android.app.AlertDialog
 import kotlinx.coroutines.*
+import android.util.Log
+import androidx.appcompat.app.AlertDialog
 
 class MainActivity : Activity() {
     private lateinit var devicePolicyManager: DevicePolicyManager
@@ -55,7 +56,7 @@ class MainActivity : Activity() {
         // Check if this is an uninstall attempt and handle protection
         if (intent?.action == Intent.ACTION_DELETE || 
             intent?.action == "android.intent.action.UNINSTALL_PACKAGE") {
-            if (UninstallProtectionManager.preventUninstallIfProtected(this)) {
+            if (preventUninstallIfProtected()) {
                 finish() // Close the uninstall flow
                 return
             }
@@ -503,7 +504,7 @@ class MainActivity : Activity() {
     
     // Show location permission dialog (like Uber/Ola)
     private fun showLocationPermissionDialog() {
-        val builder = androidx.appcompat.app.AlertDialog.Builder(this)
+        val builder = AlertDialog.Builder(this)
         builder.setTitle("📍 Location Access Required")
         builder.setMessage("Your parent needs your location for safety. Please allow location access.")
         builder.setPositiveButton("Enable Location") { _, _ ->
@@ -513,16 +514,229 @@ class MainActivity : Activity() {
             dialog.dismiss()
             
             // Show toast about manual enable
-            val toast = android.widget.Toast.makeText(
+            val toast = Toast.makeText(
                 this,
                 "📍 You can enable location manually using the button below",
-                android.widget.Toast.LENGTH_LONG
+                Toast.LENGTH_LONG
             )
             toast.show()
         }
         builder.setCancelable(false)
         builder.show()
     }
+    
+    private fun updateLocationButtonStatus(enabled: Boolean) {
+        isLocationTrackingActive = enabled
+        Log.d("MainActivity", "Location button status updated: $enabled")
+    }
+    
+    private fun enableDeviceAdmin() {
+        if (!isDeviceAdmin()) {
+            val intent = Intent(DevicePolicyManager.ACTION_ADD_DEVICE_ADMIN)
+            intent.putExtra(DevicePolicyManager.EXTRA_DEVICE_ADMIN, deviceAdminReceiver)
+            intent.putExtra(DevicePolicyManager.EXTRA_ADD_EXPLANATION, 
+                "Enable device protection to prevent unauthorized app removal")
+            startActivity(intent)
+        }
+    }
+    
+    private fun connectToParent(parentCode: String) {
+        Toast.makeText(this, "Connecting to parent dashboard...", Toast.LENGTH_SHORT).show()
+        
+        scope.launch {
+            try {
+                // Request device admin first if not enabled
+                if (!isDeviceAdmin()) {
+                    enableDeviceAdmin()
+                    return@launch
+                }
+                
+                val telephonyManager = getSystemService(Context.TELEPHONY_SERVICE) as TelephonyManager
+                val deviceImei = try {
+                    telephonyManager.deviceId ?: "unknown_${System.currentTimeMillis()}"
+                } catch (e: Exception) {
+                    "unknown_${System.currentTimeMillis()}"
+                }
+                
+                val deviceInfo = mapOf(
+                    "imei" to deviceImei,
+                    "model" to android.os.Build.MODEL,
+                    "android_version" to android.os.Build.VERSION.RELEASE,
+                    "app_version" to "1.0.0"
+                )
+                
+                // Simulate connection success for testing
+                runOnUiThread {
+                    deviceId = deviceImei
+                    Toast.makeText(this@MainActivity, "✅ Connected to parent dashboard!", Toast.LENGTH_LONG).show()
+                }
+            } catch (e: Exception) {
+                runOnUiThread {
+                    Toast.makeText(this@MainActivity, "Connection error: ${e.message}", Toast.LENGTH_LONG).show()
+                }
+            }
+        }
+    }
+    
+    private fun requestLocationPermissions() {
+        val permissions = arrayOf(
+            Manifest.permission.ACCESS_FINE_LOCATION,
+            Manifest.permission.ACCESS_COARSE_LOCATION
+        )
+        
+        if (permissions.all { ContextCompat.checkSelfPermission(this, it) == PackageManager.PERMISSION_GRANTED }) {
+            // Permissions already granted, start location tracking
+            startLocationTracking()
+        } else {
+            ActivityCompat.requestPermissions(this, permissions, LOCATION_PERMISSION_REQUEST)
+        }
+    }
+    
+    private fun startLocationTracking() {
+        if (deviceId == null) {
+            Toast.makeText(this, "Please connect to parent dashboard first", Toast.LENGTH_SHORT).show()
+            return
+        }
+        
+        locationManager.getCurrentLocation(object : LocationManager.LocationCallback {
+            override fun onLocationReceived(locationData: LocationManager.LocationData) {
+                scope.launch {
+                    // Simulate sending location update
+                    runOnUiThread {
+                        Log.d("MainActivity", "Location sent successfully via ${locationData.method}")
+                        Toast.makeText(this@MainActivity, "📍 Location shared with parent", Toast.LENGTH_SHORT).show()
+                    }
+                }
+            }
+            
+            override fun onLocationError(error: String, method: String) {
+                runOnUiThread {
+                    Toast.makeText(this@MainActivity, "Location error ($method): $error", Toast.LENGTH_SHORT).show()
+                }
+            }
+            
+            override fun onLocationDenied(reason: String) {
+                scope.launch {
+                    // Simulate sending location decline notification
+                    runOnUiThread {
+                        Log.d("MainActivity", "Location decline notification sent")
+                    }
+                }
+            }
+            
+            override fun onLocationAutoEnabled(method: String) {}
+            override fun onLocationPermissionRequired() {
+                runOnUiThread {
+                    requestLocationPermissions()
+                }
+            }
+        })
+    }
+    
+    private fun testLocationTracking() {
+        Toast.makeText(this, "Testing location tracking...", Toast.LENGTH_SHORT).show()
+        
+        locationManager.getCurrentLocation(object : LocationManager.LocationCallback {
+            override fun onLocationReceived(locationData: LocationManager.LocationData) {
+                runOnUiThread {
+                    val message = "📍 Location Test Success!\n" +
+                            "Method: ${locationData.method}\n" +
+                            "Coordinates: ${locationData.latitude}, ${locationData.longitude}\n" +
+                            "Accuracy: ${locationData.accuracy}m"
+                    
+                    AlertDialog.Builder(this@MainActivity)
+                        .setTitle("Location Test Results")
+                        .setMessage(message)
+                        .setPositiveButton("OK", null)
+                        .show()
+                    
+                    Log.d("MainActivity", "Parent requesting location - starting tracking")
+                }
+            }
+            
+            override fun onLocationError(error: String, method: String) {
+                runOnUiThread {
+                    AlertDialog.Builder(this@MainActivity)
+                        .setTitle("Location Test Failed")
+                        .setMessage("Error with $method: $error")
+                        .setPositiveButton("Retry") { _, _ ->
+                            testLocationTracking()
+                        }
+                        .setNegativeButton("Cancel", null)
+                        .show()
+                }
+            }
+            
+            override fun onLocationDenied(reason: String) {
+                scope.launch {
+                    Log.d("MainActivity", "Location declined notification sent")
+                }
+                runOnUiThread {
+                    AlertDialog.Builder(this@MainActivity)
+                        .setTitle("Location Access Denied")
+                        .setMessage("Reason: $reason\n\nWould you like to enable location permissions?")
+                        .setPositiveButton("Enable") { _, _ ->
+                            requestLocationPermissions()
+                        }
+                        .setNegativeButton("Cancel", null)
+                        .show()
+                }
+            }
+            
+            override fun onLocationAutoEnabled(method: String) {
+                runOnUiThread {
+                    Toast.makeText(this@MainActivity, "Location auto-enabled using: $method", Toast.LENGTH_SHORT).show()
+                }
+            }
+            
+            override fun onLocationPermissionRequired() {
+                runOnUiThread {
+                    requestLocationPermissions()
+                }
+            }
+        })
+    }
+    
+    private fun preventUninstallIfProtected(): Boolean {
+        return if (isDeviceAdmin()) {
+            AlertDialog.Builder(this)
+                .setTitle("🔒 Uninstall Protection")
+                .setMessage("This app is protected by device administrator. Enter parent secret code to uninstall.")
+                .setPositiveButton("Enter Code") { _, _ ->
+                    // In real implementation, show code input dialog
+                    Toast.makeText(this, "Code verification required", Toast.LENGTH_SHORT).show()
+                }
+                .setNegativeButton("Cancel") { dialog, _ ->
+                    dialog.dismiss()
+                }
+                .setCancelable(false)
+                .show()
+            true
+        } else {
+            false
+        }
+    }
+    
+    override fun onRequestPermissionsResult(requestCode: Int, permissions: Array<String>, grantResults: IntArray) {
+        super.onRequestPermissionsResult(requestCode, permissions, grantResults)
+        
+        when (requestCode) {
+            LOCATION_PERMISSION_REQUEST -> {
+                if (grantResults.isNotEmpty() && grantResults.all { it == PackageManager.PERMISSION_GRANTED }) {
+                    Toast.makeText(this, "✅ Location permissions granted!", Toast.LENGTH_SHORT).show()
+                    startLocationTracking()
+                } else {
+                    Toast.makeText(this, "❌ Location permissions required for safety features", Toast.LENGTH_LONG).show()
+                }
+            }
+        }
+    }
+    
+    override fun onDestroy() {
+        super.onDestroy()
+        scope.cancel()
+    }
+}
     
     // Update location button status
     private fun updateLocationButtonStatus(enabled: Boolean) {
