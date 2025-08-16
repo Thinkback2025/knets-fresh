@@ -38,6 +38,9 @@ jobs:
     - name: Setup Android SDK
       uses: android-actions/setup-android@v3
       
+    - name: Accept Android SDK licenses
+      run: yes | $ANDROID_HOME/cmdline-tools/latest/bin/sdkmanager --licenses || true
+      
     - name: Cache Gradle packages
       uses: actions/cache@v4
       with:
@@ -55,6 +58,10 @@ jobs:
       run: |
         cd android
         ./gradlew clean
+        
+    - name: Install required SDK components
+      run: |
+        $ANDROID_HOME/cmdline-tools/latest/bin/sdkmanager "platforms;android-33" "build-tools;33.0.1"
         
     - name: Build Debug APK
       if: github.event.inputs.build_type == 'debug' || github.event.inputs.build_type == ''
