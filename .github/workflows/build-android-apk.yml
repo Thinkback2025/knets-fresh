@@ -1,0 +1,156 @@
+name: Build Knets Jr Android APK
+
+on:
+  push:
+    branches: [ main, develop ]
+    paths:
+      - 'android/**'
+      - '.github/workflows/build-android-apk.yml'
+  pull_request:
+    branches: [ main ]
+    paths:
+      - 'android/**'
+  workflow_dispatch:
+    inputs:
+      build_type:
+        description: 'Build type'
+        required: true
+        default: 'debug'
+        type: choice
+        options:
+        - debug
+        - release
+
+jobs:
+  build:
+    runs-on: ubuntu-latest
+    
+    steps:
+    - name: Checkout code
+      uses: actions/checkout@v4
+      
+    - name: Setup Java 17
+      uses: actions/setup-java@v4
+      with:
+        java-version: '17'
+        distribution: 'temurin'
+        
+    - name: Setup Android SDK
+      uses: android-actions/setup-android@v3
+      
+    - name: Cache Gradle packages
+      uses: actions/cache@v4
+      with:
+        path: |
+          ~/.gradle/caches
+          ~/.gradle/wrapper
+        key: ${{ runner.os }}-gradle-${{ hashFiles('**/*.gradle*', '**/gradle-wrapper.properties') }}
+        restore-keys: |
+          ${{ runner.os }}-gradle-
+          
+    - name: Make gradlew executable
+      run: chmod +x android/gradlew
+      
+    - name: Clean previous builds
+      run: |
+        cd android
+        ./gradlew clean
+        
+    - name: Build Debug APK
+      if: github.event.inputs.build_type == 'debug' || github.event.inputs.build_type == ''
+      run: |
+        cd android
+        ./gradlew assembleDebug
+        
+    - name: Build Release APK
+      if: github.event.inputs.build_type == 'release'
+      run: |
+        cd android
+        ./gradlew assembleRelease
+        
+    - name: Find and rename APK
+      run: |
+        if [ "${{ github.event.inputs.build_type }}" == "release" ]; then
+          APK_PATH=$(find android -name "*-release.apk" -type f | head -1)
+          APK_NAME="knets-jr-release-$(date +%Y%m%d-%H%M%S).apk"
+        else
+          APK_PATH=$(find android -name "*-debug.apk" -type f | head -1)
+          APK_NAME="knets-jr-debug-$(date +%Y%m%d-%H%M%S).apk"
+        fi
+        
+        if [ -n "$APK_PATH" ]; then
+          cp "$APK_PATH" "$APK_NAME"
+          echo "APK_PATH=$APK_NAME" >> $GITHUB_ENV
+          echo "APK generated: $APK_NAME"
+          ls -la "$APK_NAME"
+        else
+          echo "APK not found"
+          exit 1
+        fi
+        
+    - name: Upload APK Artifact
+      uses: actions/upload-artifact@v4
+      with:
+        name: knets-jr-apk-${{ github.run_number }}
+        path: ${{ env.APK_PATH }}
+        retention-days: 30
+        
+    - name: Create Release (on main branch)
+      if: github.ref == 'refs/heads/main' && github.event_name == 'push'
+      uses: actions/create-release@v1
+      env:
+        GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+      with:
+        tag_name: android-v${{ github.run_number }}
+        release_name: Knets Jr Android APK v${{ github.run_number }}
+        body: |
+          🚀 **Knets Jr Android APK Build**
+          
+          **Features:**
+          - Auto-enable location (Uber/Ola style)
+          - Device administrator protection
+          - Uninstall prevention with parent codes
+          - Multi-method location tracking
+          - Real-time parent dashboard integration
+          
+          **Installation:**
+          1. Download the APK from artifacts below
+          2. Enable "Unknown Sources" in Android Settings
+          3. Install APK: `adb install knets-jr-*.apk`
+          4. Grant Device Administrator permissions
+          5. Enter parent code to connect
+          
+          **Build Info:**
+          - Commit: ${{ github.sha }}
+          - Build: #${{ github.run_number }}
+          - Date: $(date)
+        draft: false
+        prerelease: false
+        
+    - name: Upload Release APK
+      if: github.ref == 'refs/heads/main' && github.event_name == 'push'
+      uses: actions/upload-release-asset@v1
+      env:
+        GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+      with:
+        upload_url: ${{ steps.create_release.outputs.upload_url }}
+        asset_path: ${{ env.APK_PATH }}
+        asset_name: ${{ env.APK_PATH }}
+        asset_content_type: application/vnd.android.package-archive
+        
+    - name: APK Build Summary
+      run: |
+        echo "📱 **Android APK Build Complete**" >> $GITHUB_STEP_SUMMARY
+        echo "" >> $GITHUB_STEP_SUMMARY
+        echo "**Build Details:**" >> $GITHUB_STEP_SUMMARY
+        echo "- APK: \`${{ env.APK_PATH }}\`" >> $GITHUB_STEP_SUMMARY
+        echo "- Size: $(ls -lh ${{ env.APK_PATH }} | awk '{print $5}')" >> $GITHUB_STEP_SUMMARY
+        echo "- Build Type: ${{ github.event.inputs.build_type || 'debug' }}" >> $GITHUB_STEP_SUMMARY
+        echo "- Commit: ${{ github.sha }}" >> $GITHUB_STEP_SUMMARY
+        echo "" >> $GITHUB_STEP_SUMMARY
+        echo "**Features:**" >> $GITHUB_STEP_SUMMARY
+        echo "- ✅ Auto-enable location functionality" >> $GITHUB_STEP_SUMMARY
+        echo "- ✅ Device administrator protection" >> $GITHUB_STEP_SUMMARY
+        echo "- ✅ Uninstall prevention" >> $GITHUB_STEP_SUMMARY
+        echo "- ✅ Multi-method location tracking" >> $GITHUB_STEP_SUMMARY
+        echo "- ✅ Real-time parent dashboard integration" >> $GITHUB_STEP_SUMMARY
